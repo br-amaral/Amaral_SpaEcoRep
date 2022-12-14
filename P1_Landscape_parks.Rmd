@@ -1,0 +1,591 @@
+---
+title: "P1_Landscape_parks"
+author: Bruna Amaral
+output: html_document
+date: "2022-12-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Script to import land use maps. Import raster from tiff files (land use for 2019 to 2001) downloaded from https://www.mrlc.gov/viewer/
+             
+Input:  - park_raster/{park_name}/NLCD_{year}_Land_Cover{...}.tiff - tiff downloaded from mrlc with land use data
+
+Output: - park_raster/{park_name}_{year}_lc.rds - park raster file
+
+```{r, message=FALSE}
+## load packages ---------------------------------------------------------------
+library(dplyr)
+library(raster)
+library(sp)
+library(rgdal)
+library(rgeos)
+library(maptools)
+library(FedData)
+library(data.table)
+library("landscapemetrics")
+library("landscapetools")
+library("remotes")
+library(tidyverse)
+library(stars)
+library(sf)
+library(glue)
+```
+
+Load 2019 land use maps
+
+```{r, eval = FALSE}
+# ACAD
+acad_2019_lc <- raster("park_raster/ACAD/NLCD_2019_Land_Cover_L48_20210604_mfqOb3JASNBLUW93JK6j.tiff")
+acad_2019_lc <- projectRaster(acad_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+#raster::plot(acad_2019_lc)
+write_rds(acad_2019_lc, file = "park_raster/acad_2019_lc.rds")
+
+## ELRO
+elro_2019_lc <- raster("park_raster/ELRO/NLCD_2019_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+elro_2019_lc <- projectRaster(elro_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+
+write_rds(elro_2019_lc, file = "park_raster/elro_2019_lc.rds")
+
+## HOFR - same map as ELRO
+hofr_2019_lc <- raster("park_raster/HOFR/NLCD_2019_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+hofr_2019_lc <- projectRaster(hofr_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+
+write_rds(hofr_2019_lc, file = "park_raster/hofr_2019_lc.rds")
+
+## MABI
+mabi_2019_lc <- raster("park_raster/MABI/NLCD_2019_Land_Cover_L48_20210604_NQqfiy9JRFKBGlEHX0pL.tiff")
+mabi_2019_lc <- projectRaster(mabi_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+
+write_rds(mabi_2019_lc, file = "park_raster/mabi_2019_lc.rds")
+
+## MIMA
+mima_2019_lc <- raster("park_raster/MIMA/NLCD_2019_Land_Cover_L48_20210604_0HEC42fpeP4HuJXhXDaW.tiff")
+mima_2019_lc <- projectRaster(mima_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+write_rds(mima_2019_lc, file = "park_raster/mima_2019_lc.rds")
+
+## MORR
+morr_2019_lc <- raster("park_raster/MORR/NLCD_2019_Land_Cover_L48_20210604_pO5p1wMEcsWw3Bfm1tdq.tiff")
+morr_2019_lc <- projectRaster(morr_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+write_rds(morr_2019_lc, file = "park_raster/morr_2019_lc.rds")
+
+## SAGA
+saga_2019_lc <- raster("park_raster/SAGA/NLCD_2019_Land_Cover_L48_20210604_qDg0ycycMZTX2YThuo2L.tiff")
+saga_2019_lc <- projectRaster(saga_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+write_rds(saga_2019_lc, file = "park_raster/saga_2019_lc.rds")
+
+## SARA
+sara_2019_lc <- raster("park_raster/SARA/NLCD_2019_Land_Cover_L48_20210604_OMH06yyJCuvVMon9JLMq.tiff")
+sara_2019_lc <- projectRaster(sara_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+write_rds(sara_2019_lc, file = "park_raster/sara_2019_lc.rds")
+
+## SAIR
+sair_2019_lc <- raster("park_raster/SAIR/NLCD_2019_Land_Cover_L48_20210604_xCxN9va0Pjgak4j3Msle.tiff")
+sair_2019_lc <- projectRaster(sair_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+write_rds(sair_2019_lc, file = "park_raster/sair_2019_lc.rds")
+
+## VAMA
+vama_2019_lc <- raster("park_raster/VAMA/NLCD_2019_Land_Cover_L48_20210604_YZKoP46SFXFFMZr4v0UW.tiff")
+vama_2019_lc <- projectRaster(vama_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+write_rds(vama_2019_lc, file = "park_raster/vama_2019_lc.rds")
+
+## WEFA
+wefa_2019_lc <- raster("park_raster/WEFA/NLCD_2019_Land_Cover_L48_20210604_kn3sVRtRlZk5UVbO2E1S.tiff")
+wefa_2019_lc <- projectRaster(wefa_2019_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+write_rds(wefa_2019_lc, file = "park_raster/wefa_2019_lc.rds")
+
+```
+
+Example of plot generated for Acadia in 2019
+```{r}
+park <- "acad"
+year <- 2019
+acad_2019_lc <- readRDS(glue("~/Library/CloudStorage/OneDrive-ThePennsylvaniaStateUniversity/MSU_courses/IBIO_SpaEco/Project/park_raster/{park}_{year}_lc.rds")) %>% plot()
+```
+
+Get the maps for parks in all other years
+
+```{r, eval = FALSE}
+
+## load 2016 land use maps -----------------------------------------------------------
+# ACAD
+acad_2016_lc <- raster("park_raster/ACAD/NLCD_2016_Land_Cover_L48_20210604_mfqOb3JASNBLUW93JK6j.tiff")
+acad_2016_lc <- projectRaster(acad_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(acad_2016_lc)
+write_rds(acad_2016_lc, file = "park_raster/acad_2016_lc.rds")
+
+## ELRO
+elro_2016_lc <- raster("park_raster/ELRO/NLCD_2016_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+elro_2016_lc <- projectRaster(elro_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(elro_2016_lc)
+write_rds(elro_2016_lc, file = "park_raster/elro_2016_lc.rds")
+
+## HOFR - same map as ELRO
+hofr_2016_lc <- raster("park_raster/HOFR/NLCD_2016_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+hofr_2016_lc <- projectRaster(hofr_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(hofr_2016_lc)
+write_rds(hofr_2016_lc, file = "park_raster/hofr_2016_lc.rds")
+
+## MABI
+mabi_2016_lc <- raster("park_raster/MABI/NLCD_2016_Land_Cover_L48_20210604_NQqfiy9JRFKBGlEHX0pL.tiff")
+mabi_2016_lc <- projectRaster(mabi_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mabi_2016_lc)
+write_rds(mabi_2016_lc, file = "park_raster/mabi_2016_lc.rds")
+
+## MIMA
+mima_2016_lc <- raster("park_raster/MIMA/NLCD_2016_Land_Cover_L48_20210604_0HEC42fpeP4HuJXhXDaW.tiff")
+mima_2016_lc <- projectRaster(mima_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mima_2016_lc)
+write_rds(mima_2016_lc, file = "park_raster/mima_2016_lc.rds")
+
+## MORR
+morr_2016_lc <- raster("park_raster/MORR/NLCD_2016_Land_Cover_L48_20210604_pO5p1wMEcsWw3Bfm1tdq.tiff")
+morr_2016_lc <- projectRaster(morr_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(morr_2016_lc)
+write_rds(morr_2016_lc, file = "park_raster/morr_2016_lc.rds")
+
+## SAGA
+saga_2016_lc <- raster("park_raster/SAGA/NLCD_2016_Land_Cover_L48_20210604_qDg0ycycMZTX2YThuo2L.tiff")
+saga_2016_lc <- projectRaster(saga_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(saga_2016_lc)
+write_rds(saga_2016_lc, file = "park_raster/saga_2016_lc.rds")
+
+## SARA
+sara_2016_lc <- raster("park_raster/SARA/NLCD_2016_Land_Cover_L48_20210604_OMH06yyJCuvVMon9JLMq.tiff")
+sara_2016_lc <- projectRaster(sara_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sara_2016_lc)
+write_rds(sara_2016_lc, file = "park_raster/sara_2016_lc.rds")
+
+## SAIR
+sair_2016_lc <- raster("park_raster/SAIR/NLCD_2016_Land_Cover_L48_20210604_xCxN9va0Pjgak4j3Msle.tiff")
+sair_2016_lc <- projectRaster(sair_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sair_2016_lc)
+write_rds(sair_2016_lc, file = "park_raster/sair_2016_lc.rds")
+
+## VAMA
+vama_2016_lc <- raster("park_raster/VAMA/NLCD_2019_Land_Cover_L48_20210604_YZKoP46SFXFFMZr4v0UW.tiff")
+vama_2016_lc <- projectRaster(vama_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(vama_2016_lc)
+write_rds(vama_2016_lc, file = "park_raster/vama_2016_lc.rds")
+
+## WEFA
+wefa_2016_lc <- raster("park_raster/WEFA/NLCD_2016_Land_Cover_L48_20210604_kn3sVRtRlZk5UVbO2E1S.tiff")
+wefa_2016_lc <- projectRaster(wefa_2016_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(wefa_2016_lc)
+write_rds(wefa_2016_lc, file = "park_raster/wefa_2016_lc.rds")
+
+## load 2013 land use maps -----------------------------------------------------------
+# ACAD
+acad_2013_lc <- raster("park_raster/ACAD/NLCD_2013_Land_Cover_L48_20210604_mfqOb3JASNBLUW93JK6j.tiff")
+acad_2013_lc <- projectRaster(acad_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(acad_2013_lc)
+write_rds(acad_2013_lc, file = "park_raster/acad_2013_lc.rds")
+
+## ELRO
+elro_2013_lc <- raster("park_raster/ELRO/NLCD_2013_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+elro_2013_lc <- projectRaster(elro_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(elro_2013_lc)
+write_rds(elro_2013_lc, file = "park_raster/elro_2013_lc.rds")
+
+## HOFR - same map as ELRO
+hofr_2013_lc <- raster("park_raster/HOFR/NLCD_2013_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+hofr_2013_lc <- projectRaster(hofr_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(hofr_2013_lc)
+write_rds(hofr_2013_lc, file = "park_raster/hofr_2013_lc.rds")
+
+## MABI
+mabi_2013_lc <- raster("park_raster/MABI/NLCD_2013_Land_Cover_L48_20210604_NQqfiy9JRFKBGlEHX0pL.tiff")
+mabi_2013_lc <- projectRaster(mabi_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mabi_2013_lc)
+write_rds(mabi_2013_lc, file = "park_raster/mabi_2013_lc.rds")
+
+## MIMA
+mima_2013_lc <- raster("park_raster/MIMA/NLCD_2013_Land_Cover_L48_20210604_0HEC42fpeP4HuJXhXDaW.tiff")
+mima_2013_lc <- projectRaster(mima_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mima_2013_lc)
+write_rds(mima_2013_lc, file = "park_raster/mima_2013_lc.rds")
+
+## MORR
+morr_2013_lc <- raster("park_raster/MORR/NLCD_2013_Land_Cover_L48_20210604_pO5p1wMEcsWw3Bfm1tdq.tiff")
+morr_2013_lc <- projectRaster(morr_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(morr_2013_lc)
+write_rds(morr_2013_lc, file = "park_raster/morr_2013_lc.rds")
+
+## SAGA
+saga_2013_lc <- raster("park_raster/SAGA/NLCD_2013_Land_Cover_L48_20210604_qDg0ycycMZTX2YThuo2L.tiff")
+saga_2013_lc <- projectRaster(saga_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(saga_2013_lc)
+write_rds(saga_2013_lc, file = "park_raster/saga_2013_lc.rds")
+
+## SARA
+sara_2013_lc <- raster("park_raster/SARA/NLCD_2013_Land_Cover_L48_20210604_OMH06yyJCuvVMon9JLMq.tiff")
+sara_2013_lc <- projectRaster(sara_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sara_2013_lc)
+write_rds(sara_2013_lc, file = "park_raster/sara_2013_lc.rds")
+
+## SAIR
+sair_2013_lc <- raster("park_raster/SAIR/NLCD_2013_Land_Cover_L48_20210604_xCxN9va0Pjgak4j3Msle.tiff")
+sair_2013_lc <- projectRaster(sair_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sair_2013_lc)
+write_rds(sair_2013_lc, file = "park_raster/sair_2013_lc.rds")
+
+## VAMA
+vama_2013_lc <- raster("park_raster/VAMA/NLCD_2013_Land_Cover_L48_20210604_YZKoP46SFXFFMZr4v0UW.tiff")
+vama_2013_lc <- projectRaster(vama_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(vama_2013_lc)
+write_rds(vama_2013_lc, file = "park_raster/vama_2013_lc.rds")
+
+## WEFA
+wefa_2013_lc <- raster("park_raster/WEFA/NLCD_2013_Land_Cover_L48_20210604_kn3sVRtRlZk5UVbO2E1S.tiff")
+wefa_2013_lc <- projectRaster(wefa_2013_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(wefa_2013_lc)
+write_rds(wefa_2013_lc, file = "park_raster/wefa_2013_lc.rds")
+
+
+## load 2011 land use maps -----------------------------------------------------------
+# ACAD
+acad_2011_lc <- raster("park_raster/ACAD/NLCD_2011_Land_Cover_L48_20210604_mfqOb3JASNBLUW93JK6j.tiff")
+acad_2011_lc <- projectRaster(acad_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(acad_2011_lc)
+write_rds(acad_2011_lc, file = "park_raster/acad_2011_lc.rds")
+
+## ELRO
+elro_2011_lc <- raster("park_raster/ELRO/NLCD_2011_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+elro_2011_lc <- projectRaster(elro_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(elro_2011_lc)
+write_rds(elro_2011_lc, file = "park_raster/elro_2011_lc.rds")
+
+## HOFR - same map as ELRO
+hofr_2011_lc <- raster("park_raster/HOFR/NLCD_2011_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+hofr_2011_lc <- projectRaster(hofr_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(hofr_2011_lc)
+write_rds(hofr_2011_lc, file = "park_raster/hofr_2011_lc.rds")
+
+## MABI
+mabi_2011_lc <- raster("park_raster/MABI/NLCD_2011_Land_Cover_L48_20210604_NQqfiy9JRFKBGlEHX0pL.tiff")
+mabi_2011_lc <- projectRaster(mabi_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mabi_2011_lc)
+write_rds(mabi_2011_lc, file = "park_raster/mabi_2011_lc.rds")
+
+## MIMA
+mima_2011_lc <- raster("park_raster/MIMA/NLCD_2011_Land_Cover_L48_20210604_0HEC42fpeP4HuJXhXDaW.tiff")
+mima_2011_lc <- projectRaster(mima_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mima_2011_lc)
+write_rds(mima_2011_lc, file = "park_raster/mima_2011_lc.rds")
+
+## MORR
+morr_2011_lc <- raster("park_raster/MORR/NLCD_2011_Land_Cover_L48_20210604_pO5p1wMEcsWw3Bfm1tdq.tiff")
+morr_2011_lc <- projectRaster(morr_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(morr_2011_lc)
+write_rds(morr_2011_lc, file = "park_raster/morr_2011_lc.rds")
+
+## SAGA
+saga_2011_lc <- raster("park_raster/SAGA/NLCD_2011_Land_Cover_L48_20210604_qDg0ycycMZTX2YThuo2L.tiff")
+saga_2011_lc <- projectRaster(saga_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(saga_2011_lc)
+write_rds(saga_2011_lc, file = "park_raster/saga_2011_lc.rds")
+
+## SARA
+sara_2011_lc <- raster("park_raster/SARA/NLCD_2011_Land_Cover_L48_20210604_OMH06yyJCuvVMon9JLMq.tiff")
+sara_2011_lc <- projectRaster(sara_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sara_2011_lc)
+write_rds(sara_2011_lc, file = "park_raster/sara_2011_lc.rds")
+
+## SAIR
+sair_2011_lc <- raster("park_raster/SAIR/NLCD_2011_Land_Cover_L48_20210604_xCxN9va0Pjgak4j3Msle.tiff")
+sair_2011_lc <- projectRaster(sair_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sair_2011_lc)
+write_rds(sair_2011_lc, file = "park_raster/sair_2011_lc.rds")
+
+## VAMA
+vama_2011_lc <- raster("park_raster/VAMA/NLCD_2011_Land_Cover_L48_20210604_YZKoP46SFXFFMZr4v0UW.tiff")
+vama_2011_lc <- projectRaster(vama_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(vama_2011_lc)
+write_rds(vama_2011_lc, file = "park_raster/vama_2011_lc.rds")
+
+## WEFA
+wefa_2011_lc <- raster("park_raster/WEFA/NLCD_2011_Land_Cover_L48_20210604_kn3sVRtRlZk5UVbO2E1S.tiff")
+wefa_2011_lc <- projectRaster(wefa_2011_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(wefa_2011_lc)
+write_rds(wefa_2011_lc, file = "park_raster/wefa_2011_lc.rds")
+
+## load 2008 land use maps -----------------------------------------------------------
+# ACAD
+acad_2008_lc <- raster("park_raster/ACAD/NLCD_2008_Land_Cover_L48_20210604_mfqOb3JASNBLUW93JK6j.tiff")
+acad_2008_lc <- projectRaster(acad_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(acad_2008_lc)
+write_rds(acad_2008_lc, file = "park_raster/acad_2008_lc.rds")
+
+## ELRO
+elro_2008_lc <- raster("park_raster/ELRO/NLCD_2008_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+elro_2008_lc <- projectRaster(elro_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(elro_2008_lc)
+write_rds(elro_2008_lc, file = "park_raster/elro_2008_lc.rds")
+
+## HOFR - same map as ELRO
+hofr_2008_lc <- raster("park_raster/HOFR/NLCD_2008_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+hofr_2008_lc <- projectRaster(hofr_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(hofr_2008_lc)
+write_rds(hofr_2008_lc, file = "park_raster/hofr_2008_lc.rds")
+
+## MABI
+mabi_2008_lc <- raster("park_raster/MABI/NLCD_2008_Land_Cover_L48_20210604_NQqfiy9JRFKBGlEHX0pL.tiff")
+mabi_2008_lc <- projectRaster(mabi_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mabi_2008_lc)
+write_rds(mabi_2008_lc, file = "park_raster/mabi_2008_lc.rds")
+
+## MIMA
+mima_2008_lc <- raster("park_raster/MIMA/NLCD_2008_Land_Cover_L48_20210604_0HEC42fpeP4HuJXhXDaW.tiff")
+mima_2008_lc <- projectRaster(mima_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mima_2008_lc)
+write_rds(mima_2008_lc, file = "park_raster/mima_2008_lc.rds")
+
+## MORR
+morr_2008_lc <- raster("park_raster/MORR/NLCD_2008_Land_Cover_L48_20210604_pO5p1wMEcsWw3Bfm1tdq.tiff")
+morr_2008_lc <- projectRaster(morr_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(morr_2008_lc)
+write_rds(morr_2008_lc, file = "park_raster/morr_2008_lc.rds")
+
+## SAGA
+saga_2008_lc <- raster("park_raster/SAGA/NLCD_2008_Land_Cover_L48_20210604_qDg0ycycMZTX2YThuo2L.tiff")
+saga_2008_lc <- projectRaster(saga_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(saga_2008_lc)
+write_rds(saga_2008_lc, file = "park_raster/saga_2008_lc.rds")
+
+## SARA
+sara_2008_lc <- raster("park_raster/SARA/NLCD_2008_Land_Cover_L48_20210604_OMH06yyJCuvVMon9JLMq.tiff")
+sara_2008_lc <- projectRaster(sara_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sara_2008_lc)
+write_rds(sara_2008_lc, file = "park_raster/sara_2008_lc.rds")
+
+## SAIR
+sair_2008_lc <- raster("park_raster/SAIR/NLCD_2008_Land_Cover_L48_20210604_xCxN9va0Pjgak4j3Msle.tiff")
+sair_2008_lc <- projectRaster(sair_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sair_2008_lc)
+write_rds(sair_2008_lc, file = "park_raster/sair_2008_lc.rds")
+
+## VAMA
+vama_2008_lc <- raster("park_raster/VAMA/NLCD_2008_Land_Cover_L48_20210604_YZKoP46SFXFFMZr4v0UW.tiff")
+vama_2008_lc <- projectRaster(vama_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(vama_2008_lc)
+write_rds(vama_2008_lc, file = "park_raster/vama_2008_lc.rds")
+
+## WEFA
+wefa_2008_lc <- raster("park_raster/WEFA/NLCD_2008_Land_Cover_L48_20210604_kn3sVRtRlZk5UVbO2E1S.tiff")
+wefa_2008_lc <- projectRaster(wefa_2008_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(wefa_2008_lc)
+write_rds(wefa_2008_lc, file = "park_raster/wefa_2008_lc.rds")
+
+## load 2006 land use maps -----------------------------------------------------------
+# ACAD
+acad_2006_lc <- raster("park_raster/ACAD/NLCD_2006_Land_Cover_L48_20210604_mfqOb3JASNBLUW93JK6j.tiff")
+acad_2006_lc <- projectRaster(acad_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(acad_2006_lc)
+write_rds(acad_2006_lc, file = "park_raster/acad_2006_lc.rds")
+
+## ELRO
+elro_2006_lc <- raster("park_raster/ELRO/NLCD_2006_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+elro_2006_lc <- projectRaster(elro_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(elro_2006_lc)
+write_rds(elro_2006_lc, file = "park_raster/elro_2006_lc.rds")
+
+## HOFR - same map as ELRO
+hofr_2006_lc <- raster("park_raster/HOFR/NLCD_2006_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+hofr_2006_lc <- projectRaster(hofr_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(hofr_2006_lc)
+write_rds(hofr_2006_lc, file = "park_raster/hofr_2006_lc.rds")
+
+## MABI
+mabi_2006_lc <- raster("park_raster/MABI/NLCD_2006_Land_Cover_L48_20210604_NQqfiy9JRFKBGlEHX0pL.tiff")
+mabi_2006_lc <- projectRaster(mabi_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mabi_2006_lc)
+write_rds(mabi_2006_lc, file = "park_raster/mabi_2006_lc.rds")
+
+## MIMA
+mima_2006_lc <- raster("park_raster/MIMA/NLCD_2006_Land_Cover_L48_20210604_0HEC42fpeP4HuJXhXDaW.tiff")
+mima_2006_lc <- projectRaster(mima_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mima_2006_lc)
+write_rds(mima_2006_lc, file = "park_raster/mima_2006_lc.rds")
+
+## MORR
+morr_2006_lc <- raster("park_raster/MORR/NLCD_2006_Land_Cover_L48_20210604_pO5p1wMEcsWw3Bfm1tdq.tiff")
+morr_2006_lc <- projectRaster(morr_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(morr_2006_lc)
+write_rds(morr_2006_lc, file = "park_raster/morr_2006_lc.rds")
+
+## SAGA
+saga_2006_lc <- raster("park_raster/SAGA/NLCD_2006_Land_Cover_L48_20210604_qDg0ycycMZTX2YThuo2L.tiff")
+saga_2006_lc <- projectRaster(saga_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(saga_2006_lc)
+write_rds(saga_2006_lc, file = "park_raster/saga_2006_lc.rds")
+
+## SARA
+sara_2006_lc <- raster("park_raster/SARA/NLCD_2004_Land_Cover_L48_20210604_OMH06yyJCuvVMon9JLMq.tiff")
+sara_2006_lc <- projectRaster(sara_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sara_2006_lc)
+write_rds(sara_2006_lc, file = "park_raster/sara_2006_lc.rds")
+
+## SAIR
+sair_2006_lc <- raster("park_raster/SAIR/NLCD_2006_Land_Cover_L48_20210604_xCxN9va0Pjgak4j3Msle.tiff")
+sair_2006_lc <- projectRaster(sair_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sair_2006_lc)
+write_rds(sair_2006_lc, file = "park_raster/sair_2006_lc.rds")
+
+## VAMA
+vama_2006_lc <- raster("park_raster/VAMA/NLCD_2006_Land_Cover_L48_20210604_YZKoP46SFXFFMZr4v0UW.tiff")
+vama_2006_lc <- projectRaster(vama_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(vama_2006_lc)
+write_rds(vama_2006_lc, file = "park_raster/vama_2006_lc.rds")
+ 
+## WEFA
+wefa_2006_lc <- raster("park_raster/WEFA/NLCD_2006_Land_Cover_L48_20210604_kn3sVRtRlZk5UVbO2E1S.tiff")
+wefa_2006_lc <- projectRaster(wefa_2006_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(wefa_2006_lc)
+write_rds(wefa_2006_lc, file = "park_raster/wefa_2006_lc.rds")
+
+## load 2001 land use maps -----------------------------------------------------------
+# ACAD
+acad_2001_lc <- raster("park_raster/ACAD/NLCD_2001_Land_Cover_L48_20210604_mfqOb3JASNBLUW93JK6j.tiff")
+acad_2001_lc <- projectRaster(acad_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(acad_2001_lc)
+write_rds(acad_2001_lc, file = "park_raster/acad_2001_lc.rds")
+
+## ELRO
+elro_2001_lc <- raster("park_raster/ELRO/NLCD_2001_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+elro_2001_lc <- projectRaster(elro_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(elro_2001_lc)
+write_rds(elro_2001_lc, file = "park_raster/elro_2001_lc.rds")
+
+## HOFR - same map as ELRO
+hofr_2001_lc <- raster("park_raster/HOFR/NLCD_2001_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+hofr_2001_lc <- projectRaster(hofr_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(hofr_2001_lc)
+write_rds(hofr_2001_lc, file = "park_raster/hofr_2001_lc.rds")
+
+## MABI
+mabi_2001_lc <- raster("park_raster/MABI/NLCD_2001_Land_Cover_L48_20210604_NQqfiy9JRFKBGlEHX0pL.tiff")
+mabi_2001_lc <- projectRaster(mabi_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mabi_2001_lc)
+write_rds(mabi_2001_lc, file = "park_raster/mabi_2001_lc.rds")
+
+## MIMA
+mima_2001_lc <- raster("park_raster/MIMA/NLCD_2001_Land_Cover_L48_20210604_0HEC42fpeP4HuJXhXDaW.tiff")
+mima_2001_lc <- projectRaster(mima_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(mima_2001_lc)
+write_rds(mima_2001_lc, file = "park_raster/mima_2001_lc.rds")
+
+## MORR
+morr_2001_lc <- raster("park_raster/MORR/NLCD_2001_Land_Cover_L48_20210604_pO5p1wMEcsWw3Bfm1tdq.tiff")
+morr_2001_lc <- projectRaster(morr_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(morr_2001_lc)
+write_rds(morr_2001_lc, file = "park_raster/morr_2001_lc.rds")
+
+## SAGA
+saga_2001_lc <- raster("park_raster/SAGA/NLCD_2001_Land_Cover_L48_20210604_qDg0ycycMZTX2YThuo2L.tiff")
+saga_2001_lc <- projectRaster(saga_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(saga_2001_lc)
+write_rds(saga_2001_lc, file = "park_raster/saga_2001_lc.rds")
+
+## SARA
+sara_2001_lc <- raster("park_raster/SARA/NLCD_2001_Land_Cover_L48_20210604_OMH06yyJCuvVMon9JLMq.tiff")
+sara_2001_lc <- projectRaster(sara_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sara_2001_lc)
+write_rds(sara_2001_lc, file = "park_raster/sara_2001_lc.rds")
+
+## SAIR
+sair_2001_lc <- raster("park_raster/SAIR/NLCD_2001_Land_Cover_L48_20210604_xCxN9va0Pjgak4j3Msle.tiff")
+sair_2001_lc <- projectRaster(sair_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(sair_2001_lc)
+write_rds(sair_2001_lc, file = "park_raster/sair_2001_lc.rds")
+
+## VAMA
+vama_2001_lc <- raster("park_raster/VAMA/NLCD_2001_Land_Cover_L48_20210604_YZKoP46SFXFFMZr4v0UW.tiff")
+vama_2001_lc <- projectRaster(vama_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(vama_2001_lc)
+write_rds(vama_2001_lc, file = "park_raster/vama_2001_lc.rds")
+
+## WEFA
+wefa_2001_lc <- raster("park_raster/WEFA/NLCD_2001_Land_Cover_L48_20210604_kn3sVRtRlZk5UVbO2E1S.tiff")
+wefa_2001_lc <- projectRaster(wefa_2001_lc,
+                              crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+raster::plot(wefa_2001_lc)
+write_rds(wefa_2001_lc, file = "park_raster/wefa_2001_lc.rds")
+```

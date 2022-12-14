@@ -1,0 +1,350 @@
+---
+title: "P4_metrics_plots"
+author: "Bruna Amaral"
+date: "2022-12-09"
+output: html_document
+---
+
+Script to create plots of different landscape metrics varying by park and by year
+
+Input: 
+
+park_raster/key_park.rds - table with park names
+
+park_raster/{park}{year}_metrics.rds - matrix with first round of landscape metrics for parks
+
+metrics_tab.rds - matrix with extra landscape metrics calculated for the parks
+
+Output: 
+
+park_raster/{park}_mets.rds - matrix with organized landscape metrics for each park
+
+plots for each metric (park and year variation)
+
+```{r, message = F}
+# load packages ---------------------------------------------------------------------
+library(lattice)
+library(tidyverse)
+library(glue)
+
+knitr::opts_chunk$set(fig.width=25*1.3, fig.height=4*1.3)
+
+```
+
+```{r}
+# park list
+pn <- read_rds("park_raster/key_park.rds")
+
+park_list <- pn$parks %>% str_to_lower()
+
+years <- c(2001, 2006, 2008, 2011, 2013, 2016, 2019)
+
+## create matrix with metrix for all years and parks
+
+pat_met <- expand.grid(park_list, years)
+colnames(pat_met) <- c("park", "year")
+pat_met <- pat_met %>% 
+  as_tibble() %>% 
+  arrange(park) %>% 
+  mutate("metric" = NA,
+         "value" = NA)
+
+for(i in 1:length(park_list)) {
+  park <- park_list[i]
+  for(j in 1:length(years)){  
+    year <- years[j]
+    met <- read_rds(glue("park_raster/{park}{year}_metrics.rds"))
+    met <- met %>% 
+      mutate(park = park,
+             year =year) %>% 
+    relocate(park, year, metric, value)
+    
+    if(j == 1){met_p <- met
+    } else {
+      met_p <- rbind(met_p, met)
+    }
+    assign(glue("{park}_mets"), met_p)
+    write_rds(met_p, glue("park_raster/{park}_mets"))
+  }
+}
+
+mets_all <- rbind(acad_mets, elro_mets, hofr_mets,
+                  mabi_mets, mima_mets, morr_mets,
+                  saga_mets, sair_mets, sara_mets,
+                  vama_mets, wefa_mets) %>% 
+  mutate(park = as.factor(park)) %>% 
+  filter(year > 2005)
+
+unique(mets_all$metric)
+
+metrics_tab <- read_rds("metrics_tab.rds")
+
+```
+
+
+## Area
+```{r}
+# area -------------------------
+area_p <- mets_all %>% filter(metric == "area") %>% 
+  group_by(park, year) %>% 
+  summarise(total_area = sum(value)) %>% 
+  mutate(total_area_z = scale(total_area, center = FALSE, scale = TRUE),
+         year_z = scale(year, center = TRUE, scale = TRUE))
+
+sd(area_p$total_area)/1000
+mean(area_p$total_area)
+
+#svg(glue("area_z.#svg"), 
+#    width = 25, height = 4)
+ggplot(area_p,# %>% filter(park == "acad"),
+       aes(y = total_area_z, x = year, group= park, col=park)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park, scales = "free") +
+  theme(text = element_text(size = 25), legend.position = "none")
+#dev.off()
+
+#svg(glue("area.#svg"), 
+#    width = 25, height = 4)
+ggplot(area_p,# %>% filter(park == "acad"),
+       aes(y = total_area, x = year, group= park, col=park)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park, scales = "free")+
+  theme(text = element_text(size = 25),legend.position = "none")
+
+#dev.off()
+```
+
+
+## Number of core areas
+```{r}
+# Number of core areas -------------------------------------------------------
+ncore_p2 <- mets_all %>% filter(metric == "ncore") %>% 
+  group_by(park, year) %>% 
+  tally() %>% 
+  mutate(n_z = scale(n, center = T, scale = T))
+
+#svg(glue("ncore_z.#svg"), 
+#    width = 25, height = 4)
+ggplot(ncore_p2,aes(y = n_z, x = year, group= park, col=park)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+
+#svg(glue("ncore.#svg"), 
+#    width = 25, height = 4)
+ggplot(ncore_p2,aes(y = n, x = year, group= park, col=park)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+```
+
+
+## Interspersion and Juxtaposition index
+```{r}
+# Interspersion and Juxtaposition index (percent)
+#svg(glue("iji.#svg"), 
+#    width = 25, height = 4)
+ggplot(metrics_tab,aes(y = IJI, x = years, group= park_list, col=park_list)) + 
+  facet_grid(~park_list) +
+  geom_point(alpha = 0.3) + 
+  #geom_hline(yintercept=0, linetype="dashed") +
+  theme_bw()+
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+```
+
+
+## Contagion index
+```{r}
+# Contagion index (percent) -------------------------------------------------------------------
+#svg(glue("CI.#svg"), 
+#    width = 25, height = 4)
+ggplot(metrics_tab,aes(y = CI, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+```
+
+
+## Total edge
+```{r}
+# Total edge (m) -------------------------------------------------------------------
+#svg(glue("TE.#svg"), 
+#    width = 25, height = 4)
+ggplot(metrics_tab,aes(y = TE, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+```
+
+
+## Mean Core Area Index
+```{r}
+## cai  
+plot_tab <- metrics_tab %>% 
+  dplyr::select(park_list, years, cai)
+
+#svg(glue("cai.#svg"), 
+#    width = 25, height = 4)
+ggplot(plot_tab,aes(y = cai, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+```
+
+
+## Patch Cohesion Index
+```{r}
+## coh  
+plot_tab <- metrics_tab %>% 
+  dplyr::select(park_list, years, coh)
+
+#svg(glue("coh.#svg"), 
+#    width = 25, height = 4)
+ggplot(plot_tab,aes(y = coh, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+
+```
+
+
+## Mean Euclidian Nearest Neighbor Index
+```{r}
+## enn  
+plot_tab <- metrics_tab %>% 
+  dplyr::select(park_list, years, enn)
+
+#svg(glue("enn.#svg"), 
+#    width = 25, height = 4)
+ggplot(plot_tab,aes(y = enn, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+
+```
+
+
+## Aggregation Index
+```{r}
+## ai  
+plot_tab <- metrics_tab %>% 
+  dplyr::select(park_list, years, ai)
+
+#svg(glue("ai.#svg"), 
+#    width = 25, height = 4)
+ggplot(plot_tab,aes(y = ai, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+
+```
+
+
+## Normalized Landscape Shape Index
+```{r}
+## nlsi  
+plot_tab <- metrics_tab %>% 
+  dplyr::select(park_list, years, nlsi)
+
+#svg(glue("nlsi.#svg"), 
+#    width = 25, height = 4)
+ggplot(plot_tab,aes(y = nlsi, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+
+```
+
+
+## Perimeter Area Fractal Dimension
+```{r}
+## pafrac  
+plot_tab <- metrics_tab %>% 
+  dplyr::select(park_list, years, pafrac)
+
+#svg(glue("pafrac.#svg"), 
+#    width = 25, height = 4)
+ggplot(plot_tab,aes(y = pafrac, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+
+```
+
+
+## Clumpy Index
+```{r}
+## clu  
+plot_tab <- metrics_tab %>% 
+  dplyr::select(park_list, years, clu)
+
+#svg(glue("clu.#svg"), 
+#    width = 25, height = 4)
+ggplot(plot_tab,aes(y = clu, x = years, group= park_list, col=park_list)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(colour = "lightgray")) +
+  geom_point(alpha = 0.6) + 
+  facet_grid(~park_list) +
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme(text = element_text(size = 25),legend.position = "none")
+#dev.off()
+
+```

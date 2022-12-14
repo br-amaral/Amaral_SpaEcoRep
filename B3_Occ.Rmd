@@ -1,0 +1,335 @@
+---
+title: "B3_Occ"
+author: "Bruna Amaral"
+date: "2022-12-12"
+output: html_document
+---
+
+Load packages
+```{r, message=FALSE}
+library(stringr)
+library(auk)
+library(lubridate)
+library(sf)
+library(dggridR)
+library(unmarked)
+library(raster)
+library(ebirdst)
+library(MuMIn)
+library(AICcmodavg)
+library(fields)
+library(tidyverse)
+library(sf)
+library(rgdal)
+library(MuMIn)
+library(tibbletime)
+library(stars)
+```
+
+```{r}
+# DATA PREPARATION ----------------------------------------------------------------
+# load data
+ebird_raw <- read_csv("ebd_US_woothr_relSep-2022/wood_2019.csv") 
+ 
+# filter prior to creating occupancy model data
+# only less than 5 observers, 2019
+ebird_filtered <- ebird_raw %>%   
+  mutate(# occupancy modeling requires an integer response
+         species_observed = as.integer(`OBSERVATION COUNT`)) %>% 
+  filter(`NUMBER OBSERVERS` <= 5,
+         year2 == 2019) %>% 
+  dplyr::select(-year) %>% 
+  rename(year = year2)
+
+# fix colnames
+colnames(ebird_filtered) <- gsub(" ", "_", colnames(ebird_filtered))
+names(ebird_filtered) <- tolower(names(ebird_filtered))
+
+states <- c("Maine", "New Hampshire","Vermont", "Massachusetts", 
+            "Connecticut","New York", "New Jersey")
+
+ebird_filtered$observation_date <- gsub("/", "-", ebird_filtered$observation_date)
+ebird_filtered$month <- as.numeric(substr(ebird_filtered$observation_date,1,1))
+ebird_filtered <- ebird_filtered %>% 
+  mutate(observation_date = as.Date(observation_date, 
+                                    format = "%m-%d-%y")) %>% 
+  filter(state %in% states,
+         month == 6) 
+
+# modis land cover covariates
+habitat <- read_csv("data/pland-elev_location-year2.csv") %>% 
+  mutate(year = as.integer(year))
+
+# combine ebird and modis data
+ebird_habitat <- inner_join(ebird_filtered, habitat, by = c("locality_id", "year"))
+```
+Check dataframe with data
+
+```{r}
+glimpse(ebird_habitat)
+```
+
+Create a prediction surface
+```{r}
+# prediction surface
+pred_surface <- read_csv("data/pland-elev_prediction-surface.csv")
+# latest year of landcover data
+max_lc_year <- pred_surface$year[1]
+r <- raster("data/prediction-surface.tif")
+
+# load gis data for making maps
+map_proj <- st_crs("ESRI:102003")
+ne_land <- read_sf("data/gis-data.gpkg", "ne_land") %>% 
+  st_transform(crs = map_proj) %>% 
+  st_geometry()
+bcr <- read_sf("data/gis-data.gpkg", "bcr") %>% 
+  st_transform(crs = map_proj) %>% 
+  st_geometry()
+ne_country_lines <- read_sf("data/gis-data.gpkg", "ne_country_lines") %>% 
+  st_transform(crs = map_proj) %>% 
+  st_geometry()
+ne_state_lines <- read_sf("data/gis-data.gpkg", "ne_state_lines") %>% 
+  st_transform(crs = map_proj) %>% 
+  st_geometry()
+```
+
+Format data to run with the occupancy model for the unmarked package
+```{r}
+# DATA FORMATING ----------------------------------------------------------------
+# create detection histories for each location we define as a site
+# site as a specific location (latitude/longitude) that is visited at least twice by 
+#   the same observer within our defined period of closure (one month)
+# site_vars specifies the set of variables that defines a site. In this example, a 
+#   site is defined jointly by the location and observer IDs
+
+occ <- filter_repeat_visits(ebird_habitat, 
+                            min_obs = 2, max_obs = 5,
+                            annual_closure = TRUE,
+                            date_var = "observation_date",
+                            site_vars = c("locality_id", "observer_id"))
+
+dim(occ)
+occ <- occ %>%
+  drop_na(n_observations,
+          latitude,
+          longitude,
+          pland_04_deciduous_broadleaf,
+          pland_05_mixed_forest,
+          pland_12_cropland,
+          pland_13_urban,
+          time_observations_started,
+          duration_minutes,
+          effort_distance_km,
+          number_observers,
+          protocol_type)
+dim(occ)
+occ <- occ %>% 
+  mutate(time_observations_started = as.numeric(time_observations_started))
+
+plot(occ$longitude, occ$latitude)
+dim(ebird_filtered)
+dim(occ)
+n_distinct(occ$site)
+
+# format for unmarked
+occ_wide <- format_unmarked_occu(occ, 
+                                 site_id = "site", 
+                                 response = "species_observed",
+                                 site_covs = c("n_observations", 
+                                               "latitude", "longitude", 
+                                               "pland_04_deciduous_broadleaf", 
+                                               "pland_05_mixed_forest",
+                                               "pland_12_cropland",
+                                               "pland_13_urban",
+                                               "pland_03_deciduous_needleleaf",
+                                               "pland_01_evergreen_needleleaf"),
+                                 obs_covs = c("time_observations_started", 
+                                              "duration_minutes", 
+                                              "effort_distance_km", 
+                                              "number_observers", 
+                                              "protocol_type"#,
+                                              #"pland_04_deciduous_broadleaf", 
+                                              #"pland_05_mixed_forest"
+                                              ))
+
+# entire data set
+nrow(ebird_habitat)
+# reduced data set
+nrow(occ)
+# number of individual sites
+n_distinct(occ$site)
+```
+
+Spatial sampling: make sure the detections are well spread over my interest area
+```{r}
+# SPATIAL SUBSAMPLING -----------------------------------------
+# generate hexagonal grid with ~ 5 km between cells
+dggs <- dgconstruct(spacing = 3)
+# get hexagonal cell id for each site
+occ_wide_cell <- occ_wide %>% 
+  mutate(cell = dgGEO_to_SEQNUM(dggs, longitude, latitude)$seqnum)
+# sample one site per grid cell
+occ_ss <- occ_wide_cell %>% 
+  group_by(cell) %>% 
+  sample_n(size = 1) %>% 
+  ungroup() %>% 
+  dplyr::select(-cell)
+# calculate the percent decrease in the number of sites
+1 - nrow(occ_ss) / nrow(occ_wide)
+
+# unmarked object
+occ_um <- formatWide(occ_ss, type = "unmarkedFrameOccu")
+summary(occ_um)
+```
+
+Run the occupancy model using the unmarked package
+```{r}
+# OCCUPANCY MODELING ----------------------------------------------
+occ_model <- occu(~duration_minutes + 
+                    effort_distance_km + 
+                    number_observers +
+                    pland_04_deciduous_broadleaf + 
+                    pland_05_mixed_forest
+                  ~ pland_04_deciduous_broadleaf + 
+                    pland_05_mixed_forest + 
+                    pland_12_cropland + 
+                    pland_13_urban,
+                  data = occ_um)
+
+# the spatial sampling slightly changes the output of the model at every run (different points selected) but the main results and conclusions don't change. Here is the model output/run I used for my project
+occ_model <- readRDS("occ_mod5.rds")
+summary(occ_model)
+
+coef_plot <- as.data.frame(matrix(data = c(0.248, -2.578, -0.976, 0.365,
+                                       0.288, 0.11427, 0.23298, -0.50442, -1.90773,
+                                       0.871, 1.830, 2.361, 1.221,
+                                       0.119, 0.03598, 0.13134, 0.25942, 1.02051), 
+                                  ncol = 2))
+coef_plot <- coef_plot %>% 
+  as_tibble() %>% 
+  rename(mean1 = V1,
+         se1 = V2) %>% 
+  mutate(ciup = mean1 + 1.96*se1,
+         cilo = mean1 - 1.96*se1)
+coef_plot$name <- c("deciduous_broadleaf","mixed_forest","cropland","urban", "duration", "eff_dist", "observer", "deciduous_broadleaf_d","mixed_forest_d")
+coef_plot$name<- factor(coef_plot$name, levels = coef_plot$name)
+
+coef_plot$col <- c("gray","gray","gray","gray","black", "black","gray","gray","gray")
+ggplot(coef_plot, aes(x=mean1, y=name, colour=col)) + 
+  geom_vline(xintercept = 0, linetype="dashed", color = "darkgray") +
+  geom_errorbar(aes(xmin=cilo, xmax=ciup), width=.1) +
+  geom_point() + theme_bw()
+
+# look at the regression coefficients from the model
+# saveRDS(occ_model5, file = "occ_mod5.rds")
+```
+
+Model assessment
+```{r, warning=FALSE, message=FALSE}
+# MODEL ASSESMENT ----------------------------------------------
+occ_gof <- mb.gof.test(occ_model, nsim = 10, plot.hist = FALSE) ## change to 1000 when ready
+# hide the chisq table to give simpler output
+occ_gof$chisq.table <- NULL
+print(occ_gof)   
+```
+
+
+Model prediction
+``` {r}
+# PREDICTION -----------------------------------------
+# note: the code below can take up to an hour to run!
+occ_pred <- predict(occ_model, 
+                    newdata = as.data.frame(pred_surface), 
+                    type = "state")
+colnames(occ_pred)[1:2] <- c("fit", "se.fit")
+# add to prediction surface
+pred_occ <- bind_cols(pred_surface, 
+                      occ_prob = occ_pred$fit, 
+                      occ_se = occ_pred$se.fit) %>% 
+  dplyr::select(latitude, longitude, occ_prob, occ_se)
+
+# load layer because it takes a long time
+r_pred <- readRDS("r_pred.rds")
+# r_pred <- pred_occ %>% 
+#   # convert to spatial features
+#   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>% 
+#   st_transform(crs = projection(r)) %>% 
+#   # rasterize
+#   rasterize(r)
+# r_pred <- r_pred[[c("occ_prob", "occ_se")]]
+# saveRDS(r_pred, file = "r_pred.rds")
+
+# save the raster
+tif_dir <- "output"
+if (!dir.exists(tif_dir)) {
+  dir.create(tif_dir)
+}
+writeRaster(r_pred[["occ_prob"]], 
+            filename = file.path(tif_dir, "occupancy-model_prob_woothr.tif"),
+            overwrite = TRUE)
+writeRaster(r_pred[["occ_se"]], 
+            filename = file.path(tif_dir, "occupancy-model_se_woothr.tif"), 
+            overwrite = TRUE)
+```
+
+Plot model predictions
+```{r, fig.width= 5, fig.height= 10}
+# project predictions
+r_pred_proj <- projectRaster(r_pred, crs = map_proj$proj4string, method = "ngb")
+
+par(mfrow = c(2, 1))
+for (nm in names(r_pred)[2:3]) {
+  r_plot <- r_pred_proj[[nm]]
+  
+  par(mar = c(3.5, 0.25, 0.25, 0.25))
+  # set up plot area
+  plot(bcr, col = NA, border = NA)
+  plot(ne_land, col = "#dddddd", border = "#888888", lwd = 0.5, add = TRUE)
+  
+  # occupancy probability or standard error
+  if (nm == "occ_prob") {
+    title <- "Wood Thrush Occupancy Probability"
+    brks <- seq(0, 1, length.out = 21)
+    lbl_brks <- seq(0, 1, length.out = 11) %>% 
+      round(2)
+  } else {
+    title <- "Wood Thrush Occupancy Uncertainty (SE)"
+    mx <- ceiling(1000 * cellStats(r_plot, max)) / 1000
+    brks <- seq(0, mx, length.out = 21)
+    lbl_brks <- seq(0, mx, length.out = 11) %>% 
+      round(2)
+  }
+  pal <- abundance_palette(length(brks) - 1)
+  plot(r_plot, 
+       col = pal, breaks = brks, 
+       maxpixels = ncell(r_plot),
+       legend = FALSE, add = TRUE)
+  
+  # borders
+  plot(bcr, border = "#000000", col = NA, lwd = 1, add = TRUE)
+  plot(ne_state_lines, col = "#ffffff", lwd = 0.75, add = TRUE)
+  plot(ne_country_lines, col = "#ffffff", lwd = 1.5, add = TRUE)
+  box()
+  
+  # legend
+  par(new = TRUE, mar = c(0, 0, 0, 0))
+  image.plot(zlim = range(brks), legend.only = TRUE, 
+             breaks = brks, col = pal,
+             smallplot = c(0.25, 0.75, 0.06, 0.09),
+             horizontal = TRUE,
+             axis.args = list(at = lbl_brks, labels = lbl_brks,
+                              fg = "black", col.axis = "black",
+                              cex.axis = 0.75, lwd.ticks = 0.5,
+                              padj = -1.5),
+             legend.args = list(text = title,
+                                side = 3, col = "black",
+                                cex = 1, line = 0))
+}
+
+# save prediction plot
+#svg("occ_pred.svg")
+#r_pred_proj %>% plot()
+#dev.off()
+
+
+```

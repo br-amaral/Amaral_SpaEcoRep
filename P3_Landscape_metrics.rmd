@@ -1,0 +1,203 @@
+---
+title: "P3"
+author: "Bruna Amaral"
+date: "2022-12-09"
+output: html_document
+---
+
+Script to get the park buffer areas with forest class and calculate landscape metrics
+
+Input: 
+
+park_raster/key_park.rds - list of park names  
+
+park_raster/{park}{year}_eqres.rds - raster file with forest cover classification
+       
+park_raster/{park}{year}_rasbuf.rds - raster file with all landscape cover classes
+       
+Output: 
+
+park_raster/{park}{year}_metricsRAW.rds - all landscape metrics
+       
+park_raster/{park}{year}_metrics.rds - selected landscape metrics for parks
+       
+metrics_tab.rds - matrix for all parks with landscape metrics
+       
+metrics_tab2.rds - matrix for all parks with some extra landscape metrics
+
+
+```{r, message=FALSE}
+## load packages ------------------------------------------------------------
+library(dplyr)
+library(ggplot2)
+library(raster)
+library(sp)
+library(rgdal)
+library(rgeos)
+library(maptools)
+library(landscapemetrics)
+library(landscapetools)
+library(FedData)
+#library(GISTools) # dont work - ok
+library(data.table)
+library("landscapemetrics")
+library("landscapetools")
+library("remotes")
+library(prettymapr)
+library(cowplot)
+library(dismo)
+library(tidyverse)
+library(glue)
+
+```
+
+```{r, eval= F}
+# park list
+pn <- read_rds("park_raster/key_park.rds")
+
+park_list <- pn$parks %>% str_to_lower()
+
+years <- c(2001, 2006, 2008, 2011, 2013, 2016, 2019)
+
+metrics_tab <- tidyr::crossing(park_list, years) %>% 
+  mutate(IJI = as.numeric(NA),
+         CI = as.numeric(NA),
+         TCA = as.numeric(NA),
+         TE = as.numeric(NA),
+         NP = as.numeric(NA))
+
+patch_design <- function(park, year) {
+  
+  hood_for2 <- read_rds(glue("park_raster/{park}{year}_eqres.rds"))
+  
+  hood_metrics <- calculate_lsm(hood_for2, what = "patch")
+  
+  saveRDS(hood_metrics, file = glue("park_raster/{park}{year}_metricsRAW.rds"))
+  
+   hood_for_metrics_hist <- hood_metrics_for %>%
+     dplyr::select(value, metric) %>%
+     na.omit()
+   saveRDS(hood_for_metrics_hist, file = glue("park_raster/{park}{year}_metrics.rds"))
+  
+}
+
+for(i in 1:length(park_list)) {
+  for(j in 1:length(years)){
+    park <- park_list[i]
+    year <- years[j]
+    
+    # basic metrics
+    patch_design(park, year) 
+    
+    # extra landscape metrics:
+    
+    hood_for2 <- read_rds(glue("park_raster/{park}{year}_eqres.rds"))
+    hood_for <- read_rds(glue("park_raster/{park}{year}_rasbuf.rds"))
+    
+    row_numb <- which(metrics_tab$park_list == park & metrics_tab$years == year, arr.ind = T)
+    
+    # Interspersion and Juxtaposition index (percent)
+    hood_metrics_iji <- lsm_l_iji(hood_for)
+    metrics_tab$IJI[row_numb] <- hood_metrics_iji$value
+    
+    # Contagion index (percent)
+    hood_metrics_con <- lsm_l_contag(hood_for2)
+    metrics_tab$CI[row_numb] <- hood_metrics_con$value
+    
+    # Total core area (ha)
+    hood_metrics_tca <- lsm_l_tca(hood_for2)
+    metrics_tab$TCA[row_numb] <- hood_metrics_tca$value
+    
+    # Total edge (m)
+    hood_metrics_te <- lsm_c_te(hood_for2)
+    metrics_tab$TE[row_numb] <- hood_metrics_te %>% filter(class == 1) %>% dplyr::select(value) %>% pull()
+    
+    # number of patches
+    hood_metrics_np <- lsm_l_np(hood_for2)
+    metrics_tab$NP[row_numb] <- hood_metrics_np$value
+    
+    saveRDS(metrics_tab, file = "metrics_tab1.rds")
+  }
+}
+```
+
+
+Get some extra landscape metrics
+```{r, eval= F}
+# even more patch metrics:
+metrics_tab <- tidyr::crossing(park_list, years) %>% 
+  mutate(cai = as.numeric(NA),
+         coh = as.numeric(NA),
+         enn = as.numeric(NA),
+         cai = as.numeric(NA),
+         nlsi = as.numeric(NA),
+         clu = as.numeric(NA))
+
+for(i in 1:length(park_list)) {
+  for(j in 1:length(years)){
+    park <- park_list[i]
+    year <- years[j]
+    
+    #patch_design(park, year) 
+    
+    # extra landscape metrics:
+    hood_for2 <- read_rds(glue("park_raster/{park}{year}_eqres.rds"))
+    hood_for <- read_rds(glue("park_raster/{park}{year}_rasbuf.rds"))
+    
+    row_numb <- which(metrics_tab$park_list == park & metrics_tab$years == year, arr.ind = T)
+    
+    # CAI_MN - Mean Core Area Index (CORE AREA)
+    hood_metrics_cai <- lsm_l_cai_mn(hood_for2)
+    metrics_tab$cai[row_numb] <- hood_metrics_cai$value
+    
+    # CONNECT - Connectance Index - not available in package (CONNECTIVITY) - not available
+    # COHESION - Patch Cohesion Index
+    hood_metrics_coh <- lsm_l_cohesion(hood_for2)
+    metrics_tab$coh[row_numb] <- hood_metrics_coh$value
+    
+    # ECON_AM - Area Weighted Mean Edge Contrast Index - not available (CONTRAST) - not available
+    # TECI - Total Edge Contrast Index (CONTRAST) - not available
+    
+    # PROX_CV - Coefficient of Variation of Proximity Index (PROXIMITY/ISOLATION) - not available
+    # ENN_MN - Mean Euclidian Nearest Neighbour Index
+    hood_metrics_enn <- lsm_l_enn_mn(hood_for2)
+    metrics_tab$enn[row_numb] <- hood_metrics_enn$value
+    
+    # AI - Aggregation Index (CONTAGION/INTERSPERSION)
+    hood_metrics_ai <- lsm_l_ai(hood_for2)
+    metrics_tab$ai[row_numb] <- hood_metrics_ai$value
+    
+    # nLSI - Normalized Landscape Shape Index (AREA/EDGE/DENSITY)
+    hood_metrics_nlsi <- lsm_c_nlsi(hood_for2)
+    metrics_tab$nlsi[row_numb] <- hood_metrics_nlsi$value
+    
+    # PAFRAC - Perimeter Area Fractal Dimension (SHAPE)
+    hood_metrics_pafrac <- lsm_l_pafrac(hood_for2)
+    metrics_tab$pafrac[row_numb] <- hood_metrics_pafrac$value
+    
+    # CLUMPY - Clumpy Index (CONTAGION/INTERSPERSION)
+    hood_metrics_clu <- lsm_c_clumpy(hood_for2)
+    metrics_tab$clu[row_numb] <- hood_metrics_clu$value
+    
+    saveRDS(metrics_tab, file = "metrics_tab2.rds")
+  }
+}
+```
+
+Join two metrics tabs
+```{r, eval=FALSE}
+metrics_tab1 <- readRDS("metrics_tab1.rds")
+metrics_tab2 <- readRDS("metrics_tab2.rds")
+metrics_tab <- left_join(metrics_tab1, metrics_tab2, by = c(park_list, years))
+
+saveRDS(metrics_tab, file = "metrics_tab.rds")
+
+
+```
+
+Check the metrics table that was created
+```{r}
+metrics_tab <- readRDS("metrics_tab.rds")
+print(metrics_tab)
+
+```

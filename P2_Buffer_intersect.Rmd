@@ -1,0 +1,284 @@
+---
+title: "P2_Buffer_intersect"
+author: "Bruna Amaral"
+date: "2022-12-09"
+output: html_document
+---
+
+Code to get the area of each park, used to create a buffer around it, and crop land use rasters with the buffer (and change its resolution for landscapemetrics analysis - x and y resolution must be the same)
+
+ Input:  - park_raster/nps_boundary/nps_boundary.shp: shape file with the boundaries of US parks
+         - park_raster/{park}_{year}_lc.rds
+ Output: - park_raster/{park}_pb.rds
+
+
+```{r, message=FALSE}
+## load packages ---------------------------------------------------------------------
+library(dplyr)
+library(raster)
+library(sp)
+library(rgdal)
+library(rgeos)
+library(maptools)
+library(FedData)
+library(data.table)
+library(tidyverse)
+library(stars)
+library(sf)
+library(glue)
+library(terra)
+
+setwd("~/Library/CloudStorage/OneDrive-ThePennsylvaniaStateUniversity/MSU_courses/IBIO_SpaEco/Project")
+```
+
+Get the area of each park in a file
+```{r, eval=FALSE}
+## get park area maps -----------------------------------------------------------------
+park_bound <- readOGR(file.path("park_raster/nps_boundary/nps_boundary.shp")) #st_read("park_raster/nps_boundary/nps_boundary.shp")
+
+# ACAD
+#acad_2019_lc <- read_rds("park_raster/acad_2019_lc.rds")  # plot shape on raster to see if things are lining up
+pb_acad <- subset(park_bound, UNIT_CODE == "ACAD")
+write_rds(pb_acad, file = "park_raster/acad_pb.rds")
+# plot(acad_2019_lc)
+# plot(pb_acad, add = T, main = "ACAD")
+
+# ELRO
+#elro_2019_lc <- read_rds("park_raster/elro_2019_lc.rds")
+pb_elro <- subset(park_bound, UNIT_CODE == "ELRO")
+write_rds(pb_elro, file = "park_raster/elro_pb.rds")
+# plot(elro_2019_lc)
+# plot(pb_elro, add = T, main = "ELRO")
+
+# HOFR
+#hofr_2019_lc <- read_rds("park_raster/hofr_2019_lc.rds")
+pb_hofr <- subset(park_bound, UNIT_CODE == "HOFR")
+write_rds(pb_hofr, file = "park_raster/hofr_pb.rds")
+# plot(hofr_2019_lc)
+# plot(pb_hofr, add = T, main = "HOFR")
+
+# MABI
+#mabi_2019_lc <- read_rds("park_raster/mabi_2019_lc.rds")
+pb_mabi <- subset(park_bound, UNIT_CODE == "MABI")
+write_rds(pb_mabi, file = "park_raster/mabi_pb.rds")
+# plot(mabi_2019_lc)
+# plot(pb_mabi, add = T, main = "MABI")
+
+# MIMA
+#mima_2019_lc <- read_rds("park_raster/mima_2019_lc.rds")
+pb_mima <- subset(park_bound, UNIT_CODE == "MIMA")
+write_rds(pb_mima, file = "park_raster/mima_pb.rds")
+# plot(mima_2019_lc)
+# plot(pb_mima, add = T, main = "MIMA")
+
+# MORR
+#morr_2019_lc <- read_rds("park_raster/morr_2019_lc.rds")
+pb_morr <- subset(park_bound, UNIT_CODE == "MORR")
+write_rds(pb_morr, file = "park_raster/morr_pb.rds")
+# plot(morr_2019_lc)
+# plot(pb_morr, add = T, main = "MORR")
+
+# SAGA
+#saga_2019_lc <- read_rds("park_raster/saga_2019_lc.rds")
+pb_saga <- subset(park_bound, UNIT_CODE == "SAGA")
+write_rds(pb_saga, file = "park_raster/saga_pb.rds")
+# plot(saga_2019_lc, xlim = c(-72.5, -72.2), ylim = c(43.44, 43.6))
+# plot(pb_saga, add = T, main = "SAGA")
+
+# SARA
+#sara_2019_lc <- read_rds("park_raster/sara_2019_lc.rds")
+pb_sara <- subset(park_bound, UNIT_CODE == "SARA")
+write_rds(pb_sara, file = "park_raster/sara_pb.rds")
+# plot(sara_2019_lc)
+# plot(pb_sara, add = T, main = "SARA")
+
+# SAIR
+#sair_2019_lc <- read_rds("park_raster/sair_2019_lc.rds")
+pb_sair <- subset(park_bound, UNIT_CODE == "SAIR")
+write_rds(pb_sair, file = "park_raster/sair_pb.rds")
+# plot(sair_2019_lc)
+# plot(pb_sair, add = T, main = "SAIR")
+
+# VAMA
+#vama_2019_lc <- read_rds("park_raster/vama_2019_lc.rds")
+pb_vama <- subset(park_bound, UNIT_CODE == "VAMA")
+write_rds(pb_vama, file = "park_raster/vama_pb.rds")
+# plot(vama_2019_lc)
+# plot(pb_vama, add = T, main = "VAMA")
+
+# WEFA
+#wefa_2019_lc <- read_rds("park_raster/wefa_2019_lc.rds")
+pb_wefa <- subset(park_bound, UNIT_CODE == "WEFA")
+write_rds(pb_wefa, file = "park_raster/wefa_pb.rds")
+# plot(wefa_2019_lc)
+# plot(pb_wefa, add = T, main = "WEFA")
+```
+
+Create a buffer around every park to crop the land use map accordingly
+```{r, eval = FALSE}
+sf_use_s2(FALSE)
+
+# ACAD
+geom_acad <- st_as_sfc(pb_acad)
+buf_acad <- st_buffer(geom_acad, dist = 0.1)
+write_rds(buf_acad, file = "park_raster/buf_acad.rds")
+#plot(acad_2019_lc)
+#, xlim = c(-68.7,-68), ylim = c(44.2,44.5))
+# plot(geom_acad, add = TRUE)
+# plot(buf_acad, border = 'red', add = T)
+
+# ELRO
+geom_elro <- st_as_sfc(pb_elro)
+buf_elro <- st_buffer(geom_elro, dist = 0.1)
+write_rds(buf_elro, file = "park_raster/buf_elro.rds")
+# plot(elro_2019_lc)
+# plot(geom_elro, add = TRUE)
+# plot(buf_elro, border = 'red', add = T)
+
+# HOFR
+geom_hofr <- st_as_sfc(pb_hofr)
+buf_hofr <- st_buffer(geom_hofr, dist = 0.1)
+write_rds(buf_hofr, file = "park_raster/buf_hofr.rds")
+# plot(hofr_2019_lc)
+# plot(geom_hofr, add = TRUE)
+# plot(buf_hofr, border = 'red', add = T)
+
+# MABI
+geom_mabi <- st_as_sfc(pb_mabi)
+buf_mabi <- st_buffer(geom_mabi, dist = 0.1)
+write_rds(buf_mabi, file = "park_raster/buf_mabi.rds")
+# plot(mabi_2019_lc)
+# plot(geom_mabi, add = TRUE)
+# plot(buf_mabi, border = 'red', add = T)
+
+# MIMA
+geom_mima <- st_as_sfc(pb_mima)
+buf_mima <- st_buffer(geom_mima, dist = 0.1)
+write_rds(buf_mima, file = "park_raster/buf_mima.rds")
+# plot(mima_2019_lc)
+# plot(geom_mima, add = TRUE)
+# plot(buf_mima, border = 'red', add = T)
+
+# MORR
+geom_morr <- st_as_sfc(pb_morr)
+buf_morr <- st_buffer(geom_morr, dist = 0.1)
+write_rds(buf_morr, file = "park_raster/buf_morr.rds")
+# plot(morr_2019_lc)
+# plot(geom_morr, add = TRUE)
+# plot(buf_morr, border = 'red', add = T)
+
+# SAGA
+geom_saga <- st_as_sfc(pb_saga)
+buf_saga <- st_buffer(geom_saga, dist = 0.1)
+write_rds(buf_saga, file = "park_raster/buf_saga.rds")
+# plot(saga_2019_lc)
+# plot(geom_saga, add = TRUE)
+# plot(buf_saga, border = 'red', add = T)
+
+# SAIR
+geom_sair <- st_as_sfc(pb_sair)
+buf_sair <- st_buffer(geom_sair, dist = 0.1)
+write_rds(buf_sair, file = "park_raster/buf_sair.rds")
+# plot(sair_2019_lc) #, xlim = c(-71.02,-71), ylim = c(42.46, 42.48))
+# plot(geom_sair, add = TRUE)
+# plot(buf_sair, border = 'red', add = T)
+
+# SARA
+geom_sara <- st_as_sfc(pb_sara)
+buf_sara <- st_buffer(geom_sara, dist = 0.1)
+write_rds(buf_sara, file = "park_raster/buf_sara.rds")
+# plot(sara_2019_lc)
+# plot(geom_sara, add = TRUE)
+# plot(buf_sara, border = 'red', add = T)
+
+# VAMA
+geom_vama <- st_as_sfc(pb_vama)
+buf_vama <- st_buffer(geom_vama, dist = 0.1)
+write_rds(buf_vama, file = "park_raster/buf_vama.rds")
+# plot(vama_2019_lc)
+# plot(geom_vama, add = TRUE)
+# plot(buf_vama, border = 'red', add = T)
+
+# WEFA
+geom_wefa <- st_as_sfc(pb_wefa)
+buf_wefa <- st_buffer(geom_wefa, dist = 0.1)
+write_rds(buf_wefa, file = "park_raster/buf_wefa.rds")
+# plot(wefa_2019_lc)
+# plot(geom_wefa, add = TRUE)
+# plot(buf_wefa, border = 'red', add = T)
+```
+
+Crop the different year and park maps
+```{r, eval=FALSE}
+pn <- read_rds("park_raster/key_park.rds")
+
+park_list <- pn$parks %>% str_to_lower()
+#park_list <- park_list[-9]
+
+years <- c(2001, 2006, 2008, 2011, 2013, 2016, 2019)
+
+lcc.proj <- CRS("+proj=lcc +lat_0=41.75 +lon_0=-120.5 +lat_1=43 +lat_2=45.5 +x_0=400000 +y_0=0 +datum=NAD83 +units=ft +no_defs")
+
+# function to crop different park and years
+buf_cut <- function(park, year) {
+  
+  buf <- readRDS(file = glue("park_raster/buf_{park}.rds"))
+  if(park == "hofr" & year == 2011) {
+    # for some reason hofr_2011_lc does not work on loop
+    hofr_2011_lc <- raster("park_raster/HOFR/NLCD_2011_Land_Cover_L48_20210604_FXrB2kVAzgyCFr4fLALu.tiff")
+    hofr_2011_lc <- projectRaster(hofr_2011_lc,
+                                  crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+    park_map_year <- hofr_2011_lc
+  } else if (park == "mabi" & year == 2016){
+    # for some reason mabi_2016_lc does not work on loop
+    mabi_2016_lc <- raster("park_raster/MABI/NLCD_2016_Land_Cover_L48_20210604_NQqfiy9JRFKBGlEHX0pL.tiff")
+    mabi_2016_lc <- projectRaster(mabi_2016_lc,
+                                  crs = CRS("+proj=longlat +datum=NAD83 +no_defs"))
+    park_map_year <- mabi_2016_lc
+  } else { 
+    park_map_year <- readRDS(file = glue("park_raster/{park}_{year}_lc.rds"))
+  }
+  
+  buf_ext <- raster::extent(st_as_sf(buf))
+  int_c <- crop(park_map_year, buf_ext) 
+  int <- mask(int_c, st_as_sf(buf)) 
+  
+  saveRDS(int, file = glue("park_raster/{park}{year}_rasbuf.rds"))
+  
+  int2 <- int
+  raster::values(int2) <- raster::values(int2) %>% round(digits = 0)
+  # selecting only forest
+  int2[int2 < 41] <- 0 # make everything below 41 zero
+  int2[int2 > 43] <- 0 # make everything above 43 zero
+  int2[int2 == 41 | int2 == 42 | int2 == 43] <- 1
+  
+  # resolution on x and y is different
+  # raster::res(hood_for)
+  int3 <- projectRaster(int2, crs = lcc.proj, res=c(50,50))
+  int3[int3 > 0.5] <- 1
+  int3[int3 < 0.5] <- 0
+  saveRDS(int3, file = glue("park_raster/{park}{year}_eqres.rds"))
+
+}
+
+for(i in 1:length(park_list)) {
+  for(j in 1:length(years)){
+    park <- park_list[i]
+    year <- years[j]
+    buf_cut(park, year) 
+  }
+}
+
+```
+
+Example of the steps of getting the park area, creating the buffer and croping the landscape layer 
+```{r, echo=TRUE}
+park <- "acad"
+year <- 2019
+
+raster::plot(readRDS(glue("~/Library/CloudStorage/OneDrive-ThePennsylvaniaStateUniversity/MSU_courses/IBIO_SpaEco/Project/park_raster/{park}_pb.rds")))
+raster::plot(readRDS(glue("~/Library/CloudStorage/OneDrive-ThePennsylvaniaStateUniversity/MSU_courses/IBIO_SpaEco/Project/park_raster/buf_{park}.rds")))
+raster::plot(readRDS(glue("~/Library/CloudStorage/OneDrive-ThePennsylvaniaStateUniversity/MSU_courses/IBIO_SpaEco/Project/park_raster/{park}{year}_eqres.rds")))
+
+
+```

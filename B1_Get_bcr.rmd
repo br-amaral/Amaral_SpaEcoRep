@@ -1,0 +1,68 @@
+---
+title: "B1_Get_bcr"
+author: "Bruna Amaral"
+date: "2022-12-09"
+output: html_document
+---
+
+Script to define the area where I will be getting my land use maps from, based on bird conservation regions in the US
+
+```{r, include=FALSE}
+library(sf)
+library(rnaturalearth)
+library(dplyr)
+```
+```{r, warning=FALSE}
+# file to save spatial data
+gpkg_dir <- "data"
+if (!dir.exists(gpkg_dir)) {
+  dir.create(gpkg_dir)
+}
+f_ne <- file.path(gpkg_dir, "gis-data.gpkg")
+
+# download bcrs
+bcr <- file.path("BCR_Terrestrial/BCR_Terrestrial_master_International.shp") %>% 
+  read_sf() %>% 
+  dplyr::select(bcr_code = BCR) %>% 
+  filter(bcr_code %in% c(14,30,13,28,29))
+
+plot(bcr)
+```
+```{r, warning=FALSE}
+# political boundaries
+# land border with lakes removed
+ne_land <- ne_download(scale = 50, category = "cultural",
+                       type = "admin_0_countries_lakes",
+                       returnclass = "sf") %>%
+  filter(CONTINENT == "North America") %>%
+  st_set_precision(1e6) %>%
+  st_union()
+# country lines
+# downloaded globally then filtered to north america with st_intersect()
+ne_country_lines <- ne_download(scale = 50, category = "cultural",
+                                type = "admin_0_boundary_lines_land",
+                                returnclass = "sf") %>% 
+  st_geometry()
+ne_country_lines <- st_intersects(ne_country_lines, ne_land, sparse = FALSE) %>%
+  as.logical() %>%
+  {ne_country_lines[.]}
+# states, north america
+ne_state_lines <- ne_download(scale = 50, category = "cultural",
+                              type = "admin_1_states_provinces_lines",
+                              returnclass = "sf") %>%
+  filter(ADM0_A3 %in% c("USA", "CAN")) %>%
+  mutate(iso_a2 = recode(ADM0_A3, USA = "US", CAN = "CAN")) %>% 
+  dplyr::select(country = ADM0_NAME, country_code = iso_a2)
+
+plot(ne_country_lines)
+plot(ne_state_lines, add = T)
+plot(ne_land, add = T)
+
+# output
+unlink(f_ne)
+write_sf(ne_land, f_ne, "ne_land")
+write_sf(ne_country_lines, f_ne, "ne_country_lines")
+write_sf(ne_state_lines, f_ne, "ne_state_lines")
+write_sf(bcr, f_ne, "bcr")
+
+```
